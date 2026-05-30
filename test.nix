@@ -874,7 +874,7 @@ in
       '';
     };
 
-  gitDependencyOverride = mkGitTest rec {
+  gitDependencyOverride = mkGitTest {
     name = "git-dependency-override";
     repositories."foo" = gitRepo;
     commands = ''
@@ -891,7 +891,7 @@ in
   };
 
   # https://github.com/andir/npins/issues/75
-  regression_issue75 = mkGitTest rec {
+  regression_issue75 = mkGitTest {
     name = "regression-issue-75";
     repositories."foo" = gitRepo;
     commands = ''
@@ -902,7 +902,7 @@ in
     '';
   };
 
-  getPath = mkGitTest rec {
+  getPath = mkGitTest {
     name = "get-path";
     repositories."foo" = gitRepo;
     commands = ''
@@ -914,4 +914,32 @@ in
       eq "$(nix-instantiate --eval npins -A foo.outPath)" "\"$(npins get-path foo)\""
     '';
   };
+  applyPatch =
+    let
+      patchFile = pkgs.writeText "my.patch" ''
+        diff --git a/test.txt b/test.txt
+        index e69de29..980a0d5 100644
+        --- a/test.txt
+        +++ b/test.txt
+        @@ -0,0 +1 @@
+        +Hello World!
+      '';
+    in
+    mkGitTest {
+      name = "apply-patch";
+      repositories."foo" = gitRepo;
+      commands = ''
+        npins init --bare
+        npins add git http://localhost:8000/foo -b test-branch
+        npins show
+        set +x
+
+        RESULT=$(nix-instantiate --eval --json --strict --expr 'let pkgs = import ${pins.nixpkgs} {}; pins = import ./npins; foo = pins.foo { inherit pkgs; patches = [ ${patchFile} ]; }; in { patchedPath = foo.outPath; unpatchedPath = foo.unpatchedPath; }')
+
+        OUTPATH=$(echo "$RESULT" | ${pkgs.jq}/bin/jq -r .patchedPath)
+        UNPATCHEDPATH=$(echo "$RESULT" | ${pkgs.jq}/bin/jq -r .unpatchedPath)
+
+        neq $OUTPATH $UNPATCHEDPATH
+      '';
+    };
 }

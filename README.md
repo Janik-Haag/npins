@@ -25,6 +25,7 @@ Simple and convenient dependency pinning for Nix
   - Unlike tracking a channel from its git branch, this gives you access to the `programs.sqlite` database
   - Can also track Nix channel artifacts like live isos
 - Track PyPi packages
+- Patch pins with pkgs.applyPatches
 
 ## Getting Started
 
@@ -437,6 +438,26 @@ let
 in
 sources.mySource { inherit pkgs; }
 ```
+
+### Applying patches to pins
+
+Since there's no Nix builtin for applying patches, we need to rely on nixpkgs.
+Then you can pass patches as a list of patch files.
+
+```nix
+let
+  sources = import ./npins;
+  bootstrapPkgs = import sources.nixpkgs { };
+  patchedNixpkgs = sources.nixpkgs {
+    pkgs = bootstrapPkgs;
+    patches = [ ./my_nixpkgs.patch ];
+  };
+  pkgs = import patchedNixpkgs {};
+in pkgs.hello
+```
+
+The unpatched version is exposed as nixpkgs.unpatchedPath, while outPath is overridden with the patched version.
+You can also use something like `lib.mapAttrs` together with `builtins.readDir` to apply patches dynamically. :)
 
 ### Running the latest unreleased `npins`
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Pins now optionally take a patches attribute and apply them using pkgs.applyPatches
+
 ## 0.5.0
 
 - **[Breaking] Support for the "Lockable HTTP Tarball Protocol" has been removed.**

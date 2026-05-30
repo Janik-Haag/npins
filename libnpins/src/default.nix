@@ -38,24 +38,26 @@ let
     let
       envVarName = "NPINS_OVERRIDE_${saneName}";
       saneName = stringAsChars (c: if (builtins.match "[a-zA-Z0-9]" c) == null then "_" else c) name;
-      ersatz = builtins.getEnv envVarName;
+      replacement = builtins.getEnv envVarName;
     in
-    if ersatz == "" then
+    if replacement == "" then
       path
     else
       # this turns the string into an actual Nix path (for both absolute and
       # relative paths)
-      builtins.trace "Overriding path of \"${name}\" with \"${ersatz}\" due to set \"${envVarName}\"" (
-        if builtins.substring 0 1 ersatz == "/" then
-          /. + ersatz
-        else
-          /. + builtins.getEnv "PWD" + "/${ersatz}"
-      );
+      builtins.trace "Overriding path of \"${name}\" with \"${replacement}\" due to set \"${envVarName}\""
+        (
+          if builtins.substring 0 1 replacement == "/" then
+            /. + replacement
+          else
+            /. + builtins.getEnv "PWD" + "/${replacement}"
+        );
 
   mkSource =
     name: spec:
     {
       pkgs ? null,
+      patches ? [ ],
     }:
     assert spec ? type;
     let
@@ -98,22 +100,34 @@ let
           };
 
       path =
-        if spec.type == "Git" then
-          mkGitSource fetchers spec
-        else if spec.type == "GitRelease" then
-          mkGitSource fetchers spec
-        else if spec.type == "PyPi" then
-          mkPyPiSource fetchers spec
-        else if spec.type == "Channel" then
-          mkChannelSource fetchers spec
-        else if spec.type == "Url" || spec.type == "MutableUrl" then
-          mkUrlSource fetchers spec
-        else if spec.type == "Container" then
-          mkContainerSource pkgs spec
+        {
+          "Git" = mkGitSource fetchers spec;
+          "GitRelease" = mkGitSource fetchers spec;
+          "PyPi" = mkPyPiSource fetchers spec;
+          "Channel" = mkChannelSource fetchers spec;
+          "Url" = mkUrlSource fetchers spec;
+          "MutableUrl" = mkUrlSource fetchers spec;
+          "Container" = mkContainerSource pkgs spec;
+        }
+        .${spec.type} or (builtins.throw "Unknown source type ${spec.type}");
+
+      overridePath = mayOverride name path;
+      patchedPath =
+        if patches == [ ] then
+          overridePath
+        else if pkgs != null then
+          pkgs.applyPatches {
+            inherit name patches;
+            src = overridePath;
+          }
         else
-          builtins.throw "Unknown source type ${spec.type}";
+          builtins.throw "${name}: pkgs is required to apply patches";
     in
-    spec // { outPath = mayOverride name path; };
+    spec
+    // {
+      outPath = patchedPath;
+      unpatchedPath = overridePath;
+    };
 
   mkGitSource =
     {
